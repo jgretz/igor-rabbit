@@ -1,0 +1,45 @@
+{
+  "name": "@jgretz/igor-rabbit",
+  "version": "1.0.0",
+  "description": "rabbit mq utility to support igor microservices",
+  "author": "jgretz",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:jgretz/igor-util.git"
+  },
+  "authors": [
+    "jgretz"
+  ],
+  "scripts": {
+    "format": "prettier --write **/*.ts",
+    "lint": "eslint src/**/*.ts",
+    "clean-build": "rm -rf ./build",
+    "compile": "tsc -p .",
+    "build": "yarn format && yarn lint && yarn clean-build && yarn compile",
+    "prepublishOnly": "yarn build"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.8.2",
+    "@types/node": "^16.11.6",
+    "@typescript-eslint/eslint-plugin": "^5.2.0",
+    "@typescript-eslint/parser": "^5.2.0",
+    "eslint": "^8.1.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-prettier": "^4.0.0",
+    "prettier": "^2.4.1",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.4.0",
+    "ts-node": "^10.4.0",
+    "tsconfig-paths": "^3.11.0",
+    "typeorm": "^0.2.38",
+    "typescript": "^4.4.4"
+  },
+  "dependencies": {
+    "@jgretz/igor-log": "^1.0.0",
+    "amqplib": "^0.8.0",
+    "uuid": "^8.3.2"
+  }
+}
