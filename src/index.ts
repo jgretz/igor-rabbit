@@ -1,3 +1,2 @@
-export * from './data';
-export * from './rabbitmq';
-export * from './typeorm';
+export * from './rabbitmq.service';
+export * from './Types';
