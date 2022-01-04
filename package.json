@@ -8,7 +8,7 @@
   "types": "dist/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "git@github.com:jgretz/igor-util.git"
+    "url": "git@github.com:jgretz/igor-rabbit.git"
   },
   "authors": [
     "jgretz"
