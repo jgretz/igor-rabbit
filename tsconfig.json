@@ -1,16 +1,19 @@
 {
   "compilerOptions": {
+    "sourceMap": false,
+    "inlineSourceMap": true,
     "module": "commonjs",
-    "declaration": true,
-    "removeComments": true,
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
+    "moduleResolution": "node",
+    "target": "es5",
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "noUnusedLocals": true,
     "allowSyntheticDefaultImports": true,
-    "target": "es2017",
-    "sourceMap": true,
-    "outDir": "./dist",
-    "baseUrl": "./",
-    "incremental": true,
-    "skipLibCheck": true
-  }
+    "esModuleInterop": true,
+    "outDir": "dist",
+    "strict": false,
+    "declaration": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
