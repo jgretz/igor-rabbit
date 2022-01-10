@@ -39,10 +39,6 @@ export class RabbitMqService {
           return;
         }
 
-        channel.assertQueue(process.env.RABBIT_QUEUE, {
-          durable: true,
-        });
-
         this.channel = channel;
 
         // clear queues
@@ -64,6 +60,10 @@ export class RabbitMqService {
       this.subscriptionQueue.push({queue, key, handler});
       return;
     }
+
+    this.channel.assertQueue(queue, {
+      durable: true,
+    });
 
     this.channel.consume(queue, async (msg) => {
       const message = decode(msg.content);
@@ -92,6 +92,10 @@ export class RabbitMqService {
     if (responseHandler) {
       this.subscribe<T>(queue, replyKey, responseHandler);
     }
+
+    this.channel.assertQueue(queue, {
+      durable: true,
+    });
 
     this.channel.sendToQueue(queue, sendMsg);
   }
