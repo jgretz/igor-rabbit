@@ -5,8 +5,16 @@ import {RabbitMessageHandler} from './Types';
 import decode from './decode';
 import encode from './encode';
 
-interface Subscription<T> {
+// module types
+type SubscriptionQueueMap = {[key: string]: SubscriptionQueue<unknown>};
+
+interface SubscriptionQueue<T> {
   queue: string;
+  subscribed: boolean;
+  handlers: Array<Subscription<T>>;
+}
+
+interface Subscription<T> {
   key: string;
   handler: RabbitMessageHandler<T>;
 }
@@ -18,13 +26,36 @@ interface Message<T> {
   responseHandler?: RabbitMessageHandler<T>;
 }
 
+// private methods
+const recordSubscription = (
+  map: SubscriptionQueueMap,
+  queue: string,
+  key: string,
+  handler: RabbitMessageHandler<unknown>,
+): SubscriptionQueue<unknown> => {
+  let subscriptionQueue = map[queue];
+  if (!subscriptionQueue) {
+    subscriptionQueue = map[queue] = {
+      queue,
+      subscribed: false,
+      handlers: [],
+    };
+  }
+
+  subscriptionQueue.handlers.push({key, handler});
+
+  return subscriptionQueue;
+};
+
+// public interface
+
 export class RabbitMqService {
   channel: amqp.Channel;
-  subscriptionQueue: Array<Subscription<unknown>>;
+  subscriptionQueues: SubscriptionQueueMap;
   messageQueue: Array<Message<unknown>>;
 
   constructor() {
-    this.subscriptionQueue = [];
+    this.subscriptionQueues = {};
     this.messageQueue = [];
 
     amqp.connect(process.env.RABBIT_URL, (error, connection) => {
@@ -42,22 +73,22 @@ export class RabbitMqService {
         this.channel = channel;
 
         // clear queues
-        this.subscriptionQueue.forEach(({queue, key, handler}) => {
-          this.subscribe(queue, key, handler);
-        });
-
         this.messageQueue.forEach(({queue, key, payload, responseHandler}) => {
           this.send(queue, key, payload, responseHandler);
+        });
+
+        Object.keys(this.subscriptionQueues).forEach((queue) => {
+          this.subscriptionQueues[queue].handlers.forEach(({key, handler}) => {
+            this.subscribe(queue, key, handler);
+          });
         });
       });
     });
   }
 
-  // START HERE - the channel hasnt been established by the time someone calls subscribe
-
   subscribe<T>(queue: string, key: string, handler: RabbitMessageHandler<T>) {
-    if (!this.channel) {
-      this.subscriptionQueue.push({queue, key, handler});
+    const subscriptionQueue = recordSubscription(this.subscriptionQueues, queue, key, handler);
+    if (!this.channel || subscriptionQueue.subscribed) {
       return;
     }
 
@@ -67,17 +98,25 @@ export class RabbitMqService {
 
     this.channel.consume(queue, async (msg) => {
       const message = decode(msg.content);
-      if (message.key !== key) {
+      const handlers = this.subscriptionQueues[queue].handlers
+        .filter(({key}) => message.key === key)
+        .map(({handler}) => handler);
+
+      if (handlers.length === 0) {
         return;
       }
 
       this.channel.ack(msg);
 
-      const response = await handler(message);
-      if (message.replyKey) {
-        this.send<T>(queue, message.replyKey, response);
-      }
+      handlers.forEach(async (handler) => {
+        const response = await handler(message);
+        if (message.replyKey) {
+          this.send<T>(queue, message.replyKey, response);
+        }
+      });
     });
+
+    subscriptionQueue.subscribed = true;
   }
 
   send<T>(queue: string, key: string, payload: any, responseHandler?: RabbitMessageHandler<T>) {
@@ -86,16 +125,16 @@ export class RabbitMqService {
       return;
     }
 
+    this.channel.assertQueue(queue, {
+      durable: true,
+    });
+
     const replyKey = responseHandler ? `${key}_${uuidv4()}` : undefined;
     const sendMsg = encode(queue, key, payload, replyKey);
 
     if (responseHandler) {
       this.subscribe<T>(queue, replyKey, responseHandler);
     }
-
-    this.channel.assertQueue(queue, {
-      durable: true,
-    });
 
     this.channel.sendToQueue(queue, sendMsg);
   }
