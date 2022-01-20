@@ -1,7 +1,7 @@
 import amqp from 'amqplib/callback_api';
 import {v4 as uuidv4} from 'uuid';
 import Logger from '@jgretz/igor-log';
-import {RabbitMessageHandler} from './Types';
+import {RabbitMessage, RabbitMessageHandler} from './Types';
 import decode from './decode';
 import encode from './encode';
 
@@ -45,6 +45,23 @@ const recordSubscription = (
   subscriptionQueue.handlers.push({key, handler});
 
   return subscriptionQueue;
+};
+
+const removeSubscription = (
+  map: SubscriptionQueueMap,
+  queue: string,
+  key: string,
+  handler: RabbitMessageHandler<unknown>,
+) => {
+  const subscriptionQueue = map[queue];
+  if (!subscriptionQueue) {
+    return;
+  }
+
+  // remove single instance
+  subscriptionQueue.handlers = subscriptionQueue.handlers.filter(
+    (x) => x.key === key && x.handler !== handler,
+  );
 };
 
 // public interface
@@ -130,10 +147,19 @@ export class RabbitMqService {
     });
 
     const replyKey = responseHandler ? `${key}_${uuidv4()}` : undefined;
+    const replyHandler = responseHandler
+      ? async (message: RabbitMessage) => {
+          const response = await responseHandler(message);
+
+          removeSubscription(this.subscriptionQueues, queue, replyKey, replyHandler);
+
+          return response;
+        }
+      : null;
     const sendMsg = encode(queue, key, payload, replyKey);
 
     if (responseHandler) {
-      this.subscribe<T>(queue, replyKey, responseHandler);
+      this.subscribe<T>(queue, replyKey, replyHandler);
     }
 
     this.channel.sendToQueue(queue, sendMsg);
