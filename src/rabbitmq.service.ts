@@ -1,7 +1,7 @@
 import amqp from 'amqplib/callback_api';
 import {v4 as uuidv4} from 'uuid';
 import Logger from '@jgretz/igor-log';
-import {RabbitMessage, RabbitMessageHandler} from './Types';
+import {RabbitMessage, RabbitMessageHandler, RabbitResponseOptions, RabbitResult} from './Types';
 import decode from './decode';
 import encode from './encode';
 
@@ -18,16 +18,15 @@ interface Subscription<T> {
   key: string;
   handler: RabbitMessageHandler<T>;
 }
-
 interface Message<T> {
   queue: string;
   key: string;
   payload: any;
-  responseHandler?: RabbitMessageHandler<T>;
+  response: RabbitResponseOptions<T>;
 }
 
 // private methods
-const recordSubscription = (
+const pushSubscription = (
   map: SubscriptionQueueMap,
   queue: string,
   key: string,
@@ -47,25 +46,57 @@ const recordSubscription = (
   return subscriptionQueue;
 };
 
-const removeSubscription = (
-  map: SubscriptionQueueMap,
+const prepareForReply = <T>(
+  service: RabbitMqService,
   queue: string,
-  key: string,
-  handler: RabbitMessageHandler<unknown>,
-) => {
+  rootKey: string,
+  response: RabbitResponseOptions<T>,
+): string => {
+  let handled = false;
+  const key = `${rootKey}_${uuidv4()}`;
+
+  const handler = (message: RabbitMessage): T => {
+    handled = true;
+
+    response.handler({
+      result: message.payload instanceof Error ? RabbitResult.Error : RabbitResult.Success,
+      value: message.payload,
+    });
+    removeReplySubscription(service.subscriptionQueues, queue, key);
+
+    // we dont need this but typescript does
+    return null;
+  };
+
+  // subscribe
+  service.subscribe(queue, key, handler);
+
+  // handle timeout
+  if (response.timeout) {
+    setTimeout(() => {
+      if (handled) {
+        return;
+      }
+
+      response.handler({result: RabbitResult.Timeout});
+      removeReplySubscription(service.subscriptionQueues, queue, key);
+    }, response.timeout);
+  }
+
+  return key;
+};
+
+const removeReplySubscription = (map: SubscriptionQueueMap, queue: string, key: string) => {
   const subscriptionQueue = map[queue];
   if (!subscriptionQueue) {
     return;
   }
 
   // remove single instance
-  subscriptionQueue.handlers = subscriptionQueue.handlers.filter(
-    (x) => x.key === key && x.handler !== handler,
-  );
+  subscriptionQueue.handlers = subscriptionQueue.handlers.filter((x) => x.key !== key);
 };
 
 // public interface
-
 export class RabbitMqService {
   channel: amqp.Channel;
   subscriptionQueues: SubscriptionQueueMap;
@@ -90,21 +121,21 @@ export class RabbitMqService {
         this.channel = channel;
 
         // clear queues
-        this.messageQueue.forEach(({queue, key, payload, responseHandler}) => {
-          this.send(queue, key, payload, responseHandler);
-        });
-
         Object.keys(this.subscriptionQueues).forEach((queue) => {
           this.subscriptionQueues[queue].handlers.forEach(({key, handler}) => {
             this.subscribe(queue, key, handler);
           });
+        });
+
+        this.messageQueue.forEach(({queue, key, payload, response}) => {
+          this.send(queue, key, payload, response);
         });
       });
     });
   }
 
   subscribe<T>(queue: string, key: string, handler: RabbitMessageHandler<T>) {
-    const subscriptionQueue = recordSubscription(this.subscriptionQueues, queue, key, handler);
+    const subscriptionQueue = pushSubscription(this.subscriptionQueues, queue, key, handler);
     if (!this.channel || subscriptionQueue.subscribed) {
       return;
     }
@@ -136,9 +167,9 @@ export class RabbitMqService {
     subscriptionQueue.subscribed = true;
   }
 
-  send<T>(queue: string, key: string, payload: any, responseHandler?: RabbitMessageHandler<T>) {
+  send<T>(queue: string, key: string, payload: any, response?: RabbitResponseOptions<T>) {
     if (!this.channel) {
-      this.messageQueue.push({queue, key, payload, responseHandler});
+      this.messageQueue.push({queue, key, payload, response});
       return;
     }
 
@@ -146,21 +177,12 @@ export class RabbitMqService {
       durable: true,
     });
 
-    const replyKey = responseHandler ? `${key}_${uuidv4()}` : undefined;
-    const replyHandler = responseHandler
-      ? async (message: RabbitMessage) => {
-          const response = await responseHandler(message);
-
-          removeSubscription(this.subscriptionQueues, queue, replyKey, replyHandler);
-
-          return response;
-        }
-      : null;
-    const sendMsg = encode(queue, key, payload, replyKey);
-
-    if (responseHandler) {
-      this.subscribe<T>(queue, replyKey, replyHandler);
+    let replyKey = undefined;
+    if (response) {
+      replyKey = prepareForReply(this, queue, key, response);
     }
+
+    const sendMsg = encode(queue, key, payload, replyKey);
 
     this.channel.sendToQueue(queue, sendMsg);
   }
