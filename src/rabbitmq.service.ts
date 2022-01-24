@@ -1,7 +1,12 @@
 import amqp from 'amqplib/callback_api';
 import {v4 as uuidv4} from 'uuid';
 import Logger from '@jgretz/igor-log';
-import {RabbitMessage, RabbitMessageHandler, RabbitResponseOptions, RabbitResult} from './Types';
+import {
+  RabbitMessage,
+  RabbitMessageHandler,
+  RabbitResponseOptions,
+  RabbitResultType,
+} from './Types';
 import decode from './decode';
 import encode from './encode';
 
@@ -59,8 +64,8 @@ const prepareForReply = <T>(
     handled = true;
 
     response.handler({
-      result: message.payload instanceof Error ? RabbitResult.Error : RabbitResult.Success,
-      value: message.payload,
+      type: message.payload instanceof Error ? RabbitResultType.Error : RabbitResultType.Success,
+      result: message.payload,
     });
     removeReplySubscription(service.subscriptionQueues, queue, key);
 
@@ -78,7 +83,7 @@ const prepareForReply = <T>(
         return;
       }
 
-      response.handler({result: RabbitResult.Timeout});
+      response.handler({type: RabbitResultType.Timeout});
       removeReplySubscription(service.subscriptionQueues, queue, key);
     }, response.timeout);
   }

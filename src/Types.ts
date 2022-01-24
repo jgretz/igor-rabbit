@@ -1,12 +1,11 @@
-export enum RabbitResult {
+export enum RabbitResultType {
   Success,
   Error,
   Timeout,
 }
 export interface RabbitResponse<T> {
-  result: RabbitResult;
-  error?: Error;
-  value?: T;
+  type: RabbitResultType;
+  result?: T;
 }
 
 export interface RabbitResponseOptions<T> {
