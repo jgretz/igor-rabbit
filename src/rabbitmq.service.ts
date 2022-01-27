@@ -168,6 +168,7 @@ export class RabbitMqService {
         .map(({handler}) => handler);
 
       if (handlers.length === 0) {
+        this.channel.nack(msg, false, true);
         return;
       }
 
