@@ -107,7 +107,7 @@ const send = (channel: amqp.Channel, queue: string, message: Buffer) => {
   // retry
   if (!sent) {
     setTimeout(() => {
-      Logger.log(`Retrying message to ${queue}`);
+      Logger.log(`${process.env.RABBIT_URL}: Retrying message to ${queue}`);
       send(channel, queue, message);
     }, 100);
   }
