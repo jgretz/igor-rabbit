@@ -58,7 +58,7 @@ const prepareForReply = <T>(
   response: RabbitResponseOptions<T>,
 ): string => {
   let handled = false;
-  const key = `${rootKey}_${uuidv4()}`;
+  const key = `reply_${rootKey}_${uuidv4()}`;
 
   const handler = (message: RabbitMessage): T => {
     handled = true;
@@ -99,6 +99,17 @@ const removeReplySubscription = (map: SubscriptionQueueMap, queue: string, key: 
 
   // remove single instance
   subscriptionQueue.handlers = subscriptionQueue.handlers.filter((x) => x.key !== key);
+};
+
+const send = (channel: amqp.Channel, queue: string, message: Buffer) => {
+  const sent = channel.sendToQueue(queue, message);
+
+  // retry
+  if (!sent) {
+    setTimeout(() => {
+      send(channel, queue, message);
+    }, 100);
+  }
 };
 
 // public interface
@@ -162,9 +173,9 @@ export class RabbitMqService {
       this.channel.ack(msg);
 
       handlers.forEach(async (handler) => {
-        const response = await handler(message);
+        const payload = await handler(message);
         if (message.replyKey) {
-          this.send<T>(queue, message.replyKey, response);
+          this.send<T>(queue, message.replyKey, payload);
         }
       });
     });
@@ -187,8 +198,6 @@ export class RabbitMqService {
       replyKey = prepareForReply(this, queue, key, response);
     }
 
-    const sendMsg = encode(queue, key, payload, replyKey);
-
-    this.channel.sendToQueue(queue, sendMsg);
+    send(this.channel, queue, encode(queue, key, payload, replyKey));
   }
 }
