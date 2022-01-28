@@ -1,16 +1,8 @@
-export enum RabbitResultType {
-  Success,
-  Error,
-  Timeout,
-}
-export interface RabbitResponse<T> {
-  type: RabbitResultType;
-  result?: T;
-}
+import {IgorResult} from '@jgretz/igor-shared';
 
 export interface RabbitResponseOptions<T> {
   timeout?: number;
-  handler: (response: RabbitResponse<T>) => void;
+  handler: (response: IgorResult<T>) => void;
 }
 
 export type RabbitMessage = {

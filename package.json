@@ -1,6 +1,6 @@
 {
   "name": "@jgretz/igor-rabbit",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "rabbit mq utility to support igor microservices",
   "author": "jgretz",
   "license": "MIT",
@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@jgretz/igor-log": "^1.0.4",
+    "@jgretz/igor-shared": "^1.0.0",
     "amqplib": "^0.8.0",
     "uuid": "^8.3.2"
   },
